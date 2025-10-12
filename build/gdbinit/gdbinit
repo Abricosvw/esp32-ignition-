@@ -1,0 +1,2 @@
+source D:/can-0-bus Ignition ESP32/build/gdbinit/symbols
+source D:/can-0-bus Ignition ESP32/build/gdbinit/connect
