@@ -1,0 +1,72 @@
+#include <esp32_can.h>
+
+// Пин, к которому подключена кнопка
+#define BUTTON_PIN 18 
+
+// Переменная для хранения текущего состояния "зажигания"
+// 0: OFF (0x00)
+// 1: Ключ в замке (0x01)
+// 2: Зажигание (0x03)
+int ignitionState = 0;
+
+void setup() {
+  Serial.begin(115200);
+
+  // Настраиваем пин кнопки как вход с внутренним подтягивающим резистором
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+
+  // Настраиваем CAN-шину
+  CAN0.setCANPins(GPIO_NUM_4, GPIO_NUM_5);
+  
+  // Запускаем CAN-шину на скорости 100 Кбит/с
+  if (CAN0.begin(100000)) {
+    Serial.println("CAN bus started at 100 kbps!");
+  } else {
+    Serial.println("Failed to start CAN bus.");
+  }
+}
+
+void loop() {
+  // Проверяем, нажата ли кнопка (LOW, так как используется INPUT_PULLUP)
+  if (digitalRead(BUTTON_PIN) == LOW) {
+    
+    // Увеличиваем счетчик состояния для циклического переключения
+    ignitionState++;
+    if (ignitionState > 2) {
+      ignitionState = 0;
+    }
+
+    // Создаем CAN-сообщение
+    CAN_FRAME tx_frame;
+    tx_frame.id = 0x3C0;       // ID сообщения
+    tx_frame.length = 4;       // *** Устанавливаем правильную длину кадра = 4 ***
+    tx_frame.extended = false; // Стандартный ID
+
+    // Обнуляем все байты данных на всякий случай
+    for (int i = 0; i < tx_frame.length; i++) {
+        tx_frame.data.byte[i] = 0x00;
+    }
+
+    // Устанавливаем значение для byte[2] в зависимости от состояния
+    switch (ignitionState) {
+      case 0: // OFF
+        tx_frame.data.byte[2] = 0x00; 
+        Serial.println("Button pressed! Sending ID 0x3C0, DLC=4, State: OFF (0x00)");
+        break;
+      case 1: // Ключ в замке
+        tx_frame.data.byte[2] = 0x01; 
+        Serial.println("Button pressed! Sending ID 0x3C0, DLC=4, State: Key in ignition (0x01)");
+        break;
+      case 2: // Зажигание
+        tx_frame.data.byte[2] = 0x03; 
+        Serial.println("Button pressed! Sending ID 0x3C0, DLC=4, State: Ignition (0x03)");
+        break;
+    }
+    
+    // Отправляем кадр в шину
+    CAN0.sendFrame(tx_frame);
+
+    // Задержка для антидребезга
+    delay(500); 
+  }
+}
